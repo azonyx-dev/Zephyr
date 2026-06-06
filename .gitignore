@@ -48,3 +48,7 @@ build/Zephyr/Zephyr.vcxproj
 build/Zephyr/Zephyr.vcxproj.filters
 build/ZERO_CHECK.vcxproj
 build/ZERO_CHECK.vcxproj.filters
+build/.vs/Zephyr.slnx/v18/.suo
+build/.vs/Zephyr.slnx/v18/DocumentLayout.json
+build/.vs/Zephyr.slnx/FileContentIndex/a70ff2d9-e527-4c26-846e-a8e6829a2386.vsidx
+build/.vs/Zephyr.slnx/v18/Insiders/ipch/AutoPCH/8afccda2d6105fa9/RESULT.ipch
