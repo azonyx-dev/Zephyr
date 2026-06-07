@@ -33,11 +33,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Cache compiler (Ubuntu)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: |
+            /usr/bin/${{ matrix.cc }}
+            /usr/bin/${{ matrix.cxx }}
+            /usr/lib/gcc
+            /usr/include/c++
+          key: compiler-${{ matrix.os }}-${{ matrix.cxx }}
+
       - name: Install compiler (Ubuntu)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y ${{ matrix.cxx }}
+          if ! command -v ${{ matrix.cxx }} &> /dev/null; then
+            sudo apt-get update -q
+            sudo apt-get install -y ${{ matrix.cxx }}
+          else
+            echo "${{ matrix.cxx }} already cached, skipping install"
+          fi
+
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: build
+          key: build-${{ matrix.os }}-${{ matrix.cxx }}-${{ hashFiles('CMakeLists.txt', 'Zephyr/CMakeLists.txt', 'tests/CMakeLists.txt', '**/*.cpp', '**/*.hpp') }}
+          restore-keys: |
+            build-${{ matrix.os }}-${{ matrix.cxx }}-
 
       - name: Configure
         shell: bash
@@ -58,5 +81,63 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build --build-config Release --output-on-failure
-        
+        id: run_tests
+        shell: bash
+        run: |
+          ctest --test-dir build \
+                --build-config Release \
+                --output-on-failure \
+                --output-junit test-results.xml \
+          && echo "outcome=passed" >> $GITHUB_OUTPUT \
+          || echo "outcome=failed" >> $GITHUB_OUTPUT
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        run: |
+          OUTCOME="${{ steps.run_tests.outputs.outcome }}"
+
+          if [ "$OUTCOME" = "passed" ]; then
+            BADGE="(⁠✿⁠^⁠‿⁠^⁠) Passed"
+          else
+            BADGE="˙◠˙ failed"
+          fi
+
+          echo "## $BADGE ${{ matrix.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ ! -f test-results.xml ]; then
+            echo "_No test results found — build may have failed._" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          TOTAL=$(grep -o 'tests="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo 0)
+          FAILED=$(grep -o 'failures="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo 0)
+          ERRORS=$(grep -o 'errors="[0-9]*"' test-results.xml | head -1 | grep -o '[0-9]*' || echo 0)
+          PASSED=$(( TOTAL - FAILED - ERRORS ))
+
+          echo "| Result  |  Count  |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|---------|" >> $GITHUB_STEP_SUMMARY
+          echo "|  Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+          echo "|  Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+          echo "|  Errors | $ERRORS |" >> $GITHUB_STEP_SUMMARY
+          echo "|  Total  | $TOTAL  |" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$FAILED" -gt 0 ] || [ "$ERRORS" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Failed tests" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -A5 'failure\|error' test-results.xml \
+              | sed 's/<[^>]*>//g' \
+              | sed '/^$/d' \
+              >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.cxx || 'msvc' }}
+          path: test-results.xml
+          if-no-files-found: ignore
