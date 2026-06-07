@@ -44,7 +44,7 @@ namespace zephyr::pak
 
 	struct PakEntry
 	{
-		i64 offet = 0;
+		i64 offset = 0;
 		i64 compressedSize = 0;
 		i64 uncompressedSize = 0;
 		u32 compressionMethodIndex = 0;
