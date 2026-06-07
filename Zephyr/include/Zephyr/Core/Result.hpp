@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 
-namespace Zephyr
+namespace zephyr
 {
 	enum class Status : int32_t
 	{
